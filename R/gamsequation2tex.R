@@ -29,7 +29,7 @@ gamsequation2tex <- function(x) {
     return(x)
   }
 
-  convertSide <- function(x) {
+  convertSide <- function(x, eqMap) {
 
     extractVars <- function(x, variable, code = "v", protected = c("sum", "prod", "power")) {
 
@@ -43,7 +43,12 @@ gamsequation2tex <- function(x) {
       }
 
       vars <- vars[!(vars %in% protected)]
+
       vars <- sub("^AND$", "\\\\&", vars)
+      vars <- sub("^OR$", "\\\\|", vars)
+      vars <- sub("^eq$", "=", vars)
+      vars <- sub("^ge$", "\\\\geq", vars)
+      vars <- sub("^ne$", "\\\\neq", vars)
 
       if (code == "v") vars <- gsub("\\_", "\\\\_", vars)
 
@@ -70,8 +75,8 @@ gamsequation2tex <- function(x) {
         if (is.null(z)) return(NULL)
         # Code needs to be in \\2!
         # prefixes need to be consistent to ids in replacement pattern
-        # prefix "n" can be used to suppress brakets in convertBlocks
-        # (brakets only set for ids starting with "b")
+        # prefix "n" can be used to suppress brackets in convertBlocks
+        # (brackets only set for ids starting with "b")
         while (grepl(pattern, z[1])) {
           code <- sub("^[^#]*#([^#]*)#.*$", "\\1", stri_extract_first_regex(z[1], pattern))
           id <- which(names(z) == paste0("#", code, "#"))
@@ -126,13 +131,42 @@ gamsequation2tex <- function(x) {
       return(x)
     }
 
+    convertVars <- function(var, eqMap) {
+
+      if (is.null(eqMap)) {
+        return(var)
+      }
+
+      # escape underscore in existing variable names
+      eqMap[, "V1"] <- gsub("\\_", "\\\\_", eqMap$V1)
+
+      # escape backslash in new variable names
+      eqMap[, "V2"] <- gsub("\\\\", "\\\\\\\\", eqMap$V2)
+
+      for (i in names(var)) {
+
+        # split elements into parts only existing of word character or backslash,
+        # as this is the expected granularity in the equation mapping
+        parts <- stri_extract_all_regex(var[i], "[\\w\\\\]{1,}")[[1]]
+        for (p in parts) {
+          if (p %in% eqMap$V1) {
+            var[i] <- gsub(
+              gsub("\\_", "\\\\_", p),
+              eqMap[eqMap$V1 == p, "V2"],
+              var[i]
+            )
+          }
+        }
+      }
+      return(var)
+    }
+
     mergeBack <- function(x) {
       vars <- x[-1]
       x <- x[1]
       for (i in names(vars)) x <- sub(i, vars[i], x, fixed = TRUE)
       return(x)
     }
-
 
     variable <- "[\\w.]{1,}(\\([\\w,\"'+-]*\\)|)"
     y <- extractVars(x, variable, "v")
@@ -142,6 +176,8 @@ gamsequation2tex <- function(x) {
     z <- convertFunctions(z)
     if (is.null(z)) return("#FAILED#")
     z <- convertBlocks(z)
+
+    y$vars <- convertVars(y$vars, eqMap)
 
     x <- mergeBack(c(z, y$vars))
 
@@ -153,8 +189,18 @@ gamsequation2tex <- function(x) {
 
   # split name and equation
   pattern <- "^\n*(.*?) *\\.\\. *(.*?);?$"
+  eqMap <- NULL
+
   if (grepl(pattern, x)) {
     name <- stri_replace_all_fixed(sub(pattern, "\\1", x), " ", "")
+
+    # TODO: make the path a variable
+    mapPath <- file.path("doc", "latexVariables", paste0(sub("\\(.*\\)", "", name), ".csv"))
+
+    if (file.exists(mapPath)) {
+      eqMap <- read.csv2(mapPath, sep = ",", header = FALSE)
+    }
+
     eq <- sub(pattern, "\\2", x)
   } else  {
     name <- "undefined"
@@ -180,8 +226,8 @@ gamsequation2tex <- function(x) {
                    "=g=" = "\\geq",
                    "=n=" = "\\neq")
 
-  left <- convertSide(left)
-  right <- convertSide(right)
+  left <- convertSide(left, eqMap)
+  right <- convertSide(right, eqMap)
 
   out <- paste(left, middle, right)
   out <- gsub(" +", " ", out)
