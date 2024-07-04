@@ -181,6 +181,7 @@ gamsequation2tex <- function(x) {
   # remove comments at the end of the line
   x <- gsub(" *!![^\n]*(\n|$)", "\\1", x)
 
+
   # split name and equation
   pattern <- "^\n*(.*?) *\\.\\. *(.*?);?$"
   eqMap <- NULL
@@ -207,9 +208,16 @@ gamsequation2tex <- function(x) {
     eq <- x
   }
 
-  if (grepl("(^\\$|\n\\$)", x)) {
-    return(unconverted(x, name, "Cannot handle equations with preceeding dollar conditions! Return original code!"))
-  }
+  # TODO: make this a proper evaluation and also optional
+  # remove $ifthen and $endif lines
+
+  eq <- gsub("\\$ifthen(.+?)\\\n", "", eq)
+  eq <- gsub("\\$endif\\\n", "", eq)
+
+
+  # if (grepl("(^\\$|\n\\$)", x)) {
+  #   return(unconverted(x, name, "Cannot handle equations with preceeding dollar conditions! Return original code!"))
+  # }
 
   # split sides
   pattern <- "^(.*)(=[lLgGeEnN]=)(.*)$"
