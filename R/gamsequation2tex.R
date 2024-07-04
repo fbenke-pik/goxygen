@@ -137,22 +137,16 @@ gamsequation2tex <- function(x) {
         return(var)
       }
 
-      # escape underscore in existing variable names
-      eqMap[, "V1"] <- gsub("\\_", "\\\\_", eqMap$V1)
-
-      # escape backslash in new variable names
-      eqMap[, "V2"] <- gsub("\\\\", "\\\\\\\\", eqMap$V2)
-
       for (i in names(var)) {
 
         # split elements into parts only existing of word character or backslash,
         # as this is the expected granularity in the equation mapping
         parts <- stri_extract_all_regex(var[i], "[\\w\\\\]{1,}")[[1]]
         for (p in parts) {
-          if (p %in% eqMap$V1) {
+          if (p %in% eqMap$variable) {
             var[i] <- gsub(
               gsub("\\_", "\\\\_", p),
-              eqMap[eqMap$V1 == p, "V2"],
+              eqMap[eqMap$variable == p, "symbol"],
               var[i]
             )
           }
@@ -198,7 +192,13 @@ gamsequation2tex <- function(x) {
     mapPath <- file.path("doc", "latexVariables", paste0(sub("\\(.*\\)", "", name), ".csv"))
 
     if (file.exists(mapPath)) {
-      eqMap <- read.csv2(mapPath, sep = ",", header = FALSE)
+      eqMap <- read.csv2(mapPath, sep = ",", header = FALSE, col.names = c("variable", "symbol"))
+
+      # escape underscore in existing variable names
+      eqMap[, "variable"] <- gsub("\\_", "\\\\_", eqMap$variable)
+
+      # escape backslash in symbols
+      eqMap[, "symbol"] <- gsub("\\\\", "\\\\\\\\", eqMap$symbol)
     }
 
     eq <- sub(pattern, "\\2", x)
@@ -238,6 +238,14 @@ gamsequation2tex <- function(x) {
   out <- paste("\\begin{multline*}\n", out, "\n\\end{multline*}")
   out <- gsub("\t", " ", out)
   out <- gsub("\n[\n ]*\n", "\n", out)
+
+  if (!is.null(eqMap)) {
+
+    eqMap[, "symbol"] <- paste0("\\\\[", eqMap[, "symbol"], "\\\\]")
+    t <- pandoc.table.return(eqMap)
+    out <- paste0(out, "\n", t)
+  }
+
   names(out) <- name
 
   if (grepl("#", out)) {
